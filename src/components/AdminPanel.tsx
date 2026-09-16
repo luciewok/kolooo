@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Prize, SpinLog, SystemSettings, CompetitionEntry, QuizQuestion } from '../types';
 import { resolvePrizeImage } from '../utils/storage';
 import LZString from 'lz-string';
@@ -92,6 +92,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [formActive, setFormActive] = useState<boolean>(true);
   const [formHasStockLimit, setFormHasStockLimit] = useState<boolean>(false);
   const [formStock, setFormStock] = useState<number | ''>(10);
+  const [formImage, setFormImage] = useState<string | undefined>(undefined);
 
   // PIN change state
   const [newPin, setNewPin] = useState('');
@@ -109,6 +110,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const [sheetsStatus, setSheetsStatus] = useState<GoogleSheetsSyncStatus | null>(null);
 
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   const handleExport = async () => {
     try {
       const exportData = {
@@ -116,48 +119,79 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         settings,
         questions
       };
-      const jsonStr = JSON.stringify(exportData);
-      const compressed = LZString.compressToBase64(jsonStr);
-      await navigator.clipboard.writeText(compressed);
-      alert('✅ Nastavení bylo zkopírováno do schránky (nyní je mnohem kratší)!\n\nNyní můžete jít na jiný tablet, otevřít stejnou administraci, kliknout na "Importovat" a vložit tento kód.');
+      // For file export, we don't need compression, raw JSON is perfectly fine and safe
+      const jsonStr = JSON.stringify(exportData, null, 2);
+      
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `kolo_stesti_nastaveni.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     } catch (err) {
       alert('Chyba při exportu: ' + String(err));
     }
   };
 
   const handleImport = () => {
-    const input = prompt('Vložte kód pro import nastavení (zkopírovaný z jiného zařízení):');
-    if (!input) return;
-    try {
-      // Zpětná kompatibilita pro staré (nekomprimované) i nové kódy
-      let jsonStr = '';
-      if (input.startsWith('%7B') || input.startsWith('ey')) {
-        // Starý formát (base64 of URI encoded or direct base64)
+    fileInputRef.current?.click();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const fileContent = event.target?.result as string;
+        let jsonStr = fileContent.trim();
+        let importData;
+
+        // Try parsing directly (new raw JSON format)
         try {
-           jsonStr = decodeURIComponent(escape(atob(input)));
+          importData = JSON.parse(jsonStr);
         } catch {
-           jsonStr = LZString.decompressFromBase64(input) || '';
+          // If it fails, try the old compression formats just in case they uploaded a .txt with the old code
+          try {
+            if (jsonStr.startsWith('%7B') || jsonStr.startsWith('ey')) {
+              try {
+                 jsonStr = decodeURIComponent(escape(atob(jsonStr)));
+              } catch {
+                 jsonStr = LZString.decompressFromBase64(jsonStr) || '';
+              }
+            } else {
+              jsonStr = LZString.decompressFromBase64(jsonStr) || '';
+            }
+            importData = JSON.parse(jsonStr);
+          } catch {
+             throw new Error('Nelze přečíst formát souboru.');
+          }
         }
-      } else {
-        // Nový komprimovaný formát
-        jsonStr = LZString.decompressFromBase64(input) || '';
+        
+        if (importData && importData.prizes && importData.settings && importData.questions) {
+          if (confirm('Opravdu chcete přepsat aktuální nastavení, výhry a otázky kvízu? Tato akce je nevratná.')) {
+            onUpdatePrizes(importData.prizes);
+            onUpdateSettings(importData.settings);
+            onUpdateQuestions(importData.questions);
+            alert('✅ Import ze souboru proběhl úspěšně!');
+          }
+        } else {
+          alert('❌ Neplatný nebo poškozený soubor s nastavením.');
+        }
+      } catch (err) {
+        alert('❌ Chyba při čtení souboru. Zkontrolujte, zda jste vybrali správný .json soubor.');
       }
       
-      const importData = JSON.parse(jsonStr);
-      
-      if (importData && importData.prizes && importData.settings && importData.questions) {
-        if (confirm('Opravdu chcete přepsat aktuální nastavení, výhry a otázky kvízu? Tato akce je nevratná.')) {
-          onUpdatePrizes(importData.prizes);
-          onUpdateSettings(importData.settings);
-          onUpdateQuestions(importData.questions);
-          alert('✅ Import proběhl úspěšně!');
-        }
-      } else {
-        alert('❌ Neplatný nebo poškozený kód pro import.');
+      // Reset the file input so the same file can be selected again if needed
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
       }
-    } catch (err) {
-      alert('❌ Chyba při importu. Zkontrolujte, zda je vložený kód správný a kompletní.');
-    }
+    };
+    reader.readAsText(file);
   };
 
   React.useEffect(() => {
@@ -261,6 +295,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormColor(prize.color);
     setFormWeight(prize.weight || 5);
     setFormActive(prize.active);
+    setFormImage(prize.image);
     if (prize.stock !== undefined && prize.stock !== null) {
       setFormHasStockLimit(true);
       setFormStock(prize.stock);
@@ -280,6 +315,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     setFormActive(true);
     setFormHasStockLimit(false);
     setFormStock(10);
+    setFormImage(undefined);
   };
 
   // Save Prize
@@ -301,6 +337,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         active: formActive,
         stock: stockValue,
         initialStock: stockValue,
+        image: formImage,
       };
       onUpdatePrizes([...prizes, newPrize]);
     } else if (editingPrize) {
@@ -314,14 +351,51 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               active: formActive,
               stock: stockValue,
               initialStock: formHasStockLimit ? (editingPrize.initialStock ?? stockValue) : null,
+              image: formImage,
             }
           : p
       );
       onUpdatePrizes(updated);
     }
-
     setIsAddingNew(false);
     setEditingPrize(null);
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const MAX_DIM = 200;
+        let w = img.width;
+        let h = img.height;
+        if (w > h) {
+          if (w > MAX_DIM) {
+            h = Math.round(h * (MAX_DIM / w));
+            w = MAX_DIM;
+          }
+        } else {
+          if (h > MAX_DIM) {
+            w = Math.round(w * (MAX_DIM / h));
+            h = MAX_DIM;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, w, h);
+          const dataUrl = canvas.toDataURL('image/webp', 0.8);
+          setFormImage(dataUrl);
+        }
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
   };
 
   // Quick add stock helper
@@ -1668,14 +1742,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
             <div>
               <h3 className="text-lg font-medium text-white mb-1 flex items-center gap-2">
                 <Download className="w-5 h-5 text-[#e5a995]" />
-                <span>Export a Import nastavení</span>
+                <span>Export a Import nastavení (Soubor)</span>
               </h3>
               <p className="text-xs text-slate-400 max-w-2xl">
-                Tato funkce vám umožní snadno přenést veškeré nastavení (výhry, pravděpodobnosti, otázky kvízu, PIN a nastavení) z tohoto zařízení na jiný tablet.
+                Tato funkce vám umožní snadno stáhnout veškeré nastavení (výhry, pravděpodobnosti, otázky kvízu, PIN a ikony) jako malý soubor a nahrát jej do jakéhokoliv jiného zařízení.
               </p>
             </div>
             
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              <input 
+                type="file"
+                accept=".json,.txt"
+                ref={fileInputRef}
+                style={{ display: 'none' }}
+                onChange={handleFileChange}
+              />
               <button
                 type="button"
                 onClick={handleExport}
@@ -1683,8 +1764,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 <Download className="w-5 h-5 text-sky-400" />
                 <div className="text-left leading-tight">
-                  <div className="font-semibold">Exportovat nastavení</div>
-                  <div className="text-[10px] text-slate-400">Zkopíruje kód do schránky</div>
+                  <div className="font-semibold">Uložit do souboru</div>
+                  <div className="text-[10px] text-slate-400">Stáhne se soubor .json</div>
                 </div>
               </button>
 
@@ -1695,8 +1776,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               >
                 <CloudUpload className="w-5 h-5 text-[#e5a995]" />
                 <div className="text-left leading-tight">
-                  <div className="font-semibold">Importovat nastavení</div>
-                  <div className="text-[10px] text-slate-400">Vložit kód z jiného zařízení</div>
+                  <div className="font-semibold">Nahrát ze souboru</div>
+                  <div className="text-[10px] text-slate-400">Vyberte .json soubor ze zařízení</div>
                 </div>
               </button>
             </div>
@@ -1796,6 +1877,49 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   <span className="text-white font-mono font-bold w-6 text-center">
                     {formWeight}
                   </span>
+                </div>
+              </div>
+
+              {/* Vlastní ikona (Obrázek) */}
+              <div className="pt-3 border-t border-white/10 space-y-3">
+                <label className="block text-xs font-semibold text-slate-300 uppercase tracking-wider mb-2">
+                  Ikona (Obrázek)
+                </label>
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center gap-4">
+                    <div className="w-16 h-16 rounded-xl border-2 border-dashed border-white/20 bg-black/40 flex items-center justify-center shrink-0 overflow-hidden relative">
+                      {formImage || resolvePrizeImage({ name: formName }) ? (
+                        <img 
+                          src={formImage || resolvePrizeImage({ name: formName })} 
+                          alt="Ikona výhry" 
+                          className="max-w-full max-h-full object-contain p-2" 
+                        />
+                      ) : (
+                        <Package className="w-6 h-6 text-slate-600" />
+                      )}
+                    </div>
+                    <div className="flex-1">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        onChange={handleImageUpload} 
+                        className="w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-white/10 file:text-white hover:file:bg-white/20 transition cursor-pointer"
+                      />
+                      <p className="text-[10px] text-slate-500 mt-1.5">
+                        Volitelný obrázek (ideálně čtvercový). Bude automaticky zmenšen a uložen.
+                      </p>
+                    </div>
+                  </div>
+                  {formImage && (
+                    <button 
+                      type="button" 
+                      onClick={() => setFormImage(undefined)}
+                      className="text-xs text-rose-400 hover:text-rose-300 text-left font-medium w-fit flex items-center gap-1.5 px-2 py-1 bg-rose-500/10 rounded-lg"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      Odstranit nahraný obrázek
+                    </button>
+                  )}
                 </div>
               </div>
 
