@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bgGlow" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="#2a1c17" />
+      <stop offset="100%" stop-color="#0e0a09" />
+    </radialGradient>
+    <linearGradient id="roseGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fdf4f0" />
+      <stop offset="50%" stop-color="#e5a995" />
+      <stop offset="100%" stop-color="#b87460" />
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded squircle / canvas -->
+  <rect width="512" height="512" rx="112" fill="url(#bgGlow)" />
+  <rect width="504" height="504" x="4" y="4" rx="108" fill="none" stroke="#e5a995" stroke-opacity="0.25" stroke-width="4" />
+
+  <!-- Inner glowing circle representing wheel / lens -->
+  <circle cx="256" cy="235" r="140" fill="#18110e" stroke="url(#roseGold)" stroke-width="6" />
+  
+  <!-- Subtle Wheel rays -->
+  <g stroke="url(#roseGold)" stroke-width="2" stroke-opacity="0.35">
+    <line x1="256" y1="95" x2="256" y2="375" />
+    <line x1="116" y1="235" x2="396" y2="235" />
+    <line x1="157" y1="136" x2="355" y2="334" />
+    <line x1="157" y1="334" x2="355" y2="136" />
+  </g>
+
+  <!-- Stylized "P" icon for Pixel in center -->
+  <circle cx="256" cy="235" r="54" fill="#0e0a09" stroke="#e5a995" stroke-width="3" />
+  <path d="M 235 198 L 262 198 C 278 198 288 208 288 222 C 288 236 278 246 262 246 L 247 246 L 247 274 L 235 274 Z M 247 210 L 247 234 L 261 234 C 270 234 276 229 276 222 C 276 215 270 210 261 210 Z" fill="url(#roseGold)" />
+
+  <!-- Pointer arrow top of wheel -->
+  <polygon points="256,76 244,98 268,98" fill="#f5d5c8" stroke="#e5a995" stroke-width="2" />
+
+  <!-- Brand Typography at bottom -->
+  <text x="256" y="420" text-anchor="middle" fill="#ffffff" font-family="-apple-system, BlinkMacSystemFont, 'Google Sans', sans-serif" font-size="34" font-weight="500" letter-spacing="4">GOOGLE PIXEL</text>
+  <text x="256" y="454" text-anchor="middle" fill="#e5a995" font-family="-apple-system, BlinkMacSystemFont, 'Google Sans', sans-serif" font-size="18" font-weight="600" letter-spacing="6">KOLO ŠTĚSTÍ</text>
+</svg>

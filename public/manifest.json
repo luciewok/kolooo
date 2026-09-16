@@ -1,0 +1,16 @@
+{
+  "name": "Pixel 11 Kolo štěstí",
+  "short_name": "Kolo štěstí",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0a09",
+  "theme_color": "#0d0a09",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/Logo_Pixel_Horz_RGB_WHITE.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}
