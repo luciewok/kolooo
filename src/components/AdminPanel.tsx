@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { Prize, SpinLog, SystemSettings, CompetitionEntry, QuizQuestion } from '../types';
 import { resolvePrizeImage } from '../utils/storage';
+import LZString from 'lz-string';
 import {
   Plus,
   Trash2,
@@ -116,9 +117,9 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         questions
       };
       const jsonStr = JSON.stringify(exportData);
-      const base64Str = btoa(unescape(encodeURIComponent(jsonStr)));
-      await navigator.clipboard.writeText(base64Str);
-      alert('✅ Nastavení bylo zkopírováno do schránky!\n\nNyní můžete jít na jiný tablet, otevřít stejnou administraci, kliknout na "Importovat" a vložit tento kód.');
+      const compressed = LZString.compressToBase64(jsonStr);
+      await navigator.clipboard.writeText(compressed);
+      alert('✅ Nastavení bylo zkopírováno do schránky (nyní je mnohem kratší)!\n\nNyní můžete jít na jiný tablet, otevřít stejnou administraci, kliknout na "Importovat" a vložit tento kód.');
     } catch (err) {
       alert('Chyba při exportu: ' + String(err));
     }
@@ -128,10 +129,23 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
     const input = prompt('Vložte kód pro import nastavení (zkopírovaný z jiného zařízení):');
     if (!input) return;
     try {
-      const jsonStr = decodeURIComponent(escape(atob(input)));
+      // Zpětná kompatibilita pro staré (nekomprimované) i nové kódy
+      let jsonStr = '';
+      if (input.startsWith('%7B') || input.startsWith('ey')) {
+        // Starý formát (base64 of URI encoded or direct base64)
+        try {
+           jsonStr = decodeURIComponent(escape(atob(input)));
+        } catch {
+           jsonStr = LZString.decompressFromBase64(input) || '';
+        }
+      } else {
+        // Nový komprimovaný formát
+        jsonStr = LZString.decompressFromBase64(input) || '';
+      }
+      
       const importData = JSON.parse(jsonStr);
       
-      if (importData.prizes && importData.settings && importData.questions) {
+      if (importData && importData.prizes && importData.settings && importData.questions) {
         if (confirm('Opravdu chcete přepsat aktuální nastavení, výhry a otázky kvízu? Tato akce je nevratná.')) {
           onUpdatePrizes(importData.prizes);
           onUpdateSettings(importData.settings);
